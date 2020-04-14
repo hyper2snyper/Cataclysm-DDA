@@ -15,6 +15,7 @@
 #include "item.h"
 #include "material.h"
 #include "type_id.h"
+#include "debug.h"
 
 static void test_encumbrance_on(
     player &p,
@@ -25,7 +26,7 @@ static void test_encumbrance_on(
 )
 {
     CAPTURE( body_part );
-    p.empty_traits();
+    p.clear_mutations();
     p.worn.clear();
     if( tweak_player ) {
         tweak_player( p );

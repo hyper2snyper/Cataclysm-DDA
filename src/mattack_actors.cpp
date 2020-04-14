@@ -1,38 +1,41 @@
 #include "mattack_actors.h"
 
-#include <cmath>
 #include <algorithm>
+#include <limits>
 #include <memory>
 
 #include "avatar.h"
-#include "game.h"
-#include "generic_factory.h"
-#include "gun_mode.h"
-#include "line.h"
-#include "map.h"
-#include "map_iterator.h"
-#include "messages.h"
-#include "monster.h"
-#include "npc.h"
-#include "sounds.h"
-#include "translations.h"
 #include "calendar.h"
 #include "creature.h"
 #include "enums.h"
+#include "game.h"
+#include "generic_factory.h"
+#include "gun_mode.h"
 #include "item.h"
 #include "json.h"
-#include "player.h"
-#include "rng.h"
+#include "line.h"
+#include "map.h"
+#include "map_iterator.h"
 #include "material.h"
+#include "messages.h"
+#include "monster.h"
+#include "npc.h"
+#include "player.h"
+#include "point.h"
+#include "rng.h"
+#include "sounds.h"
+#include "translations.h"
 
-const efftype_id effect_grabbed( "grabbed" );
-const efftype_id effect_bite( "bite" );
-const efftype_id effect_infected( "infected" );
-const efftype_id effect_laserlocked( "laserlocked" );
-const efftype_id effect_was_laserlocked( "was_laserlocked" );
-const efftype_id effect_targeted( "targeted" );
-const efftype_id effect_poison( "poison" );
-const efftype_id effect_badpoison( "badpoison" );
+static const efftype_id effect_badpoison( "badpoison" );
+static const efftype_id effect_bite( "bite" );
+static const efftype_id effect_grabbed( "grabbed" );
+static const efftype_id effect_infected( "infected" );
+static const efftype_id effect_laserlocked( "laserlocked" );
+static const efftype_id effect_poison( "poison" );
+static const efftype_id effect_targeted( "targeted" );
+static const efftype_id effect_was_laserlocked( "was_laserlocked" );
+
+static const trait_id trait_TOXICFLESH( "TOXICFLESH" );
 
 // Simplified version of the function in monattack.cpp
 static bool is_adjacent( const monster &z, const Creature &target )
@@ -44,21 +47,21 @@ static bool is_adjacent( const monster &z, const Creature &target )
     return z.posz() == target.posz();
 }
 
-void leap_actor::load_internal( JsonObject &obj, const std::string & )
+void leap_actor::load_internal( const JsonObject &obj, const std::string & )
 {
     // Mandatory:
     max_range = obj.get_float( "max_range" );
     // Optional:
     min_range = obj.get_float( "min_range", 1.0f );
-    allow_no_target = obj.get_bool( "allow_no_target", true );
+    allow_no_target = obj.get_bool( "allow_no_target", false );
     move_cost = obj.get_int( "move_cost", 150 );
     min_consider_range = obj.get_float( "min_consider_range", 0.0f );
     max_consider_range = obj.get_float( "max_consider_range", 200.0f );
 }
 
-mattack_actor *leap_actor::clone() const
+std::unique_ptr<mattack_actor> leap_actor::clone() const
 {
-    return new leap_actor( *this );
+    return std::make_unique<leap_actor>( *this );
 }
 
 bool leap_actor::call( monster &z ) const
@@ -76,27 +79,36 @@ bool leap_actor::call( monster &z ) const
 
     // We wanted the float for range check
     // int here will make the jumps more random
-    int best = static_cast<int>( best_float );
+    int best = std::numeric_limits<int>::max();
     if( !allow_no_target && z.attack_target() == nullptr ) {
         return false;
     }
-
-    for( const tripoint &dest : g->m.points_in_radius( z.pos(), max_range ) ) {
-        if( dest == z.pos() ) {
+    std::multimap<int, tripoint> candidates;
+    for( const tripoint &candidate : g->m.points_in_radius( z.pos(), max_range ) ) {
+        if( candidate == z.pos() ) {
             continue;
+        }
+        float leap_dist = trigdist ? trig_dist( z.pos(), candidate ) :
+                          square_dist( z.pos(), candidate );
+        if( leap_dist > max_range || leap_dist < min_range ) {
+            continue;
+        }
+        int candidate_dist = rl_dist( candidate, target );
+        if( candidate_dist >= best_float ) {
+            continue;
+        }
+        candidates.emplace( candidate_dist, candidate );
+    }
+    for( const auto &candidate : candidates ) {
+        const int &cur_dist = candidate.first;
+        const tripoint &dest = candidate.second;
+        if( cur_dist > best ) {
+            break;
         }
         if( !z.sees( dest ) ) {
             continue;
         }
         if( !g->is_empty( dest ) ) {
-            continue;
-        }
-        int cur_dist = rl_dist( target, dest );
-        if( cur_dist > best ) {
-            continue;
-        }
-        if( ( trigdist ? trig_dist( z.pos(), dest ) : square_dist( z.pos(), dest ) ) <
-            min_range ) {
             continue;
         }
         bool blocked_path = false;
@@ -108,13 +120,12 @@ bool leap_actor::call( monster &z ) const
                 break;
             }
         }
+        // don't leap into water if you could drown (#38038)
+        if( z.is_aquatic_danger( dest ) ) {
+            blocked_path = true;
+        }
         if( blocked_path ) {
             continue;
-        }
-
-        if( cur_dist < best ) {
-            // Better than any earlier one
-            options.clear();
         }
 
         options.push_back( dest );
@@ -137,6 +148,64 @@ bool leap_actor::call( monster &z ) const
     return true;
 }
 
+std::unique_ptr<mattack_actor> mon_spellcasting_actor::clone() const
+{
+    return std::make_unique<mon_spellcasting_actor>( *this );
+}
+
+void mon_spellcasting_actor::load_internal( const JsonObject &obj, const std::string & )
+{
+    std::string sp_id;
+    fake_spell intermediate;
+    mandatory( obj, was_loaded, "spell_data", intermediate );
+    self = intermediate.self;
+    translation monster_message;
+    optional( obj, was_loaded, "monster_message", monster_message,
+              //~ "<Monster Display name> cast <Spell Name> on <Target name>!"
+              to_translation( "%1$s casts %2$s at %3$s!" ) );
+    spell_data = intermediate.get_spell();
+    spell_data.set_message( monster_message );
+    avatar fake_player;
+    move_cost = spell_data.casting_time( fake_player );
+}
+
+bool mon_spellcasting_actor::call( monster &mon ) const
+{
+    if( !mon.can_act() ) {
+        return false;
+    }
+
+    if( !mon.attack_target() ) {
+        // this is an attack. there is no reason to attack if there isn't a real target.
+        return false;
+    }
+
+    const tripoint target = mon.attack_target()->pos();
+
+    std::string fx = spell_data.effect();
+    // is the spell an attack that needs to hit the target?
+    // examples of spells that don't: summons, teleport self
+    const bool targeted_attack = fx == "target_attack" || fx == "projectile_attack" ||
+                                 fx == "cone_attack" || fx == "line_attack";
+
+    if( targeted_attack && rl_dist( mon.pos(), target ) > spell_data.range() ) {
+        return false;
+    }
+
+    std::string target_name;
+    if( const Creature *target_monster = g->critter_at( target ) ) {
+        target_name = target_monster->disp_name();
+    }
+
+    if( g->u.sees( target ) ) {
+        add_msg( spell_data.message(), mon.disp_name(), spell_data.name(), target_name );
+    }
+
+    spell_data.cast_all_effects( mon, target );
+
+    return true;
+}
+
 melee_actor::melee_actor()
 {
     damage_max_instance = damage_instance::physical( 9, 0, 0, 0 );
@@ -145,12 +214,11 @@ melee_actor::melee_actor()
     move_cost = 100;
 }
 
-void melee_actor::load_internal( JsonObject &obj, const std::string & )
+void melee_actor::load_internal( const JsonObject &obj, const std::string & )
 {
     // Optional:
     if( obj.has_array( "damage_max_instance" ) ) {
-        JsonArray arr = obj.get_array( "damage_max_instance" );
-        damage_max_instance = load_damage_instance( arr );
+        damage_max_instance = load_damage_instance( obj.get_array( "damage_max_instance" ) );
     } else if( obj.has_object( "damage_max_instance" ) ) {
         damage_max_instance = load_damage_instance( obj );
     }
@@ -160,23 +228,21 @@ void melee_actor::load_internal( JsonObject &obj, const std::string & )
     move_cost = obj.get_int( "move_cost", 100 );
     accuracy = obj.get_int( "accuracy", INT_MIN );
 
-    optional( obj, was_loaded, "miss_msg_u", miss_msg_u, translated_string_reader,
-              _( "The %s lunges at you, but you dodge!" ) );
-    optional( obj, was_loaded, "no_dmg_msg_u", no_dmg_msg_u, translated_string_reader,
-              _( "The %1$s bites your %2$s, but fails to penetrate armor!" ) );
-    optional( obj, was_loaded, "hit_dmg_u", hit_dmg_u, translated_string_reader,
-              _( "The %1$s bites your %2$s!" ) );
-    optional( obj, was_loaded, "miss_msg_npc", miss_msg_npc, translated_string_reader,
-              _( "The %s lunges at <npcname>, but they dodge!" ) );
-    optional( obj, was_loaded, "no_dmg_msg_npc", no_dmg_msg_npc, translated_string_reader,
-              _( "The %1$s bites <npcname>'s %2$s, but fails to penetrate armor!" ) );
-    optional( obj, was_loaded, "hit_dmg_npc", hit_dmg_npc, translated_string_reader,
-              _( "The %1$s bites <npcname>'s %2$s!" ) );
+    optional( obj, was_loaded, "miss_msg_u", miss_msg_u,
+              to_translation( "The %s lunges at you, but you dodge!" ) );
+    optional( obj, was_loaded, "no_dmg_msg_u", no_dmg_msg_u,
+              to_translation( "The %1$s bites your %2$s, but fails to penetrate armor!" ) );
+    optional( obj, was_loaded, "hit_dmg_u", hit_dmg_u,
+              to_translation( "The %1$s bites your %2$s!" ) );
+    optional( obj, was_loaded, "miss_msg_npc", miss_msg_npc,
+              to_translation( "The %s lunges at <npcname>, but they dodge!" ) );
+    optional( obj, was_loaded, "no_dmg_msg_npc", no_dmg_msg_npc,
+              to_translation( "The %1$s bites <npcname>'s %2$s, but fails to penetrate armor!" ) );
+    optional( obj, was_loaded, "hit_dmg_npc", hit_dmg_npc,
+              to_translation( "The %1$s bites <npcname>'s %2$s!" ) );
 
     if( obj.has_array( "body_parts" ) ) {
-        JsonArray jarr = obj.get_array( "body_parts" );
-        while( jarr.has_more() ) {
-            JsonArray sub = jarr.next_array();
+        for( JsonArray sub : obj.get_array( "body_parts" ) ) {
             const body_part bp = get_body_part_token( sub.get_string( 0 ) );
             const float prob = sub.get_float( 1 );
             body_parts.add_or_replace( bp, prob );
@@ -184,9 +250,7 @@ void melee_actor::load_internal( JsonObject &obj, const std::string & )
     }
 
     if( obj.has_array( "effects" ) ) {
-        JsonArray jarr = obj.get_array( "effects" );
-        while( jarr.has_more() ) {
-            JsonObject eff = jarr.next_object();
+        for( JsonObject eff : obj.get_array( "effects" ) ) {
             effects.push_back( load_mon_effect_data( eff ) );
         }
     }
@@ -276,16 +340,14 @@ void melee_actor::on_damage( monster &z, Creature &target, dealt_damage_instance
     }
 }
 
-mattack_actor *melee_actor::clone() const
+std::unique_ptr<mattack_actor> melee_actor::clone() const
 {
-    return new melee_actor( *this );
+    return std::make_unique<melee_actor>( *this );
 }
 
-bite_actor::bite_actor()
-{
-}
+bite_actor::bite_actor() = default;
 
-void bite_actor::load_internal( JsonObject &obj, const std::string &src )
+void bite_actor::load_internal( const JsonObject &obj, const std::string &src )
 {
     melee_actor::load_internal( obj, src );
     no_infection_chance = obj.get_int( "no_infection_chance", 14 );
@@ -304,15 +366,15 @@ void bite_actor::on_damage( monster &z, Creature &target, dealt_damage_instance 
             target.add_effect( effect_bite, 1_turns, hit, true );
         }
     }
-    if( target.has_trait( trait_id( "TOXICFLESH" ) ) ) {
+    if( target.has_trait( trait_TOXICFLESH ) ) {
         z.add_effect( effect_poison, 5_minutes );
         z.add_effect( effect_badpoison, 5_minutes );
     }
 }
 
-mattack_actor *bite_actor::clone() const
+std::unique_ptr<mattack_actor> bite_actor::clone() const
 {
-    return new bite_actor( *this );
+    return std::make_unique<bite_actor>( *this );
 }
 
 gun_actor::gun_actor() : description( _( "The %1$s fires its %2$s!" ) ),
@@ -320,16 +382,14 @@ gun_actor::gun_actor() : description( _( "The %1$s fires its %2$s!" ) ),
 {
 }
 
-void gun_actor::load_internal( JsonObject &obj, const std::string & )
+void gun_actor::load_internal( const JsonObject &obj, const std::string & )
 {
     gun_type = obj.get_string( "gun_type" );
 
     obj.read( "ammo_type", ammo_type );
 
     if( obj.has_array( "fake_skills" ) ) {
-        JsonArray jarr = obj.get_array( "fake_skills" );
-        while( jarr.has_more() ) {
-            JsonArray cur = jarr.next_array();
+        for( JsonArray cur : obj.get_array( "fake_skills" ) ) {
             fake_skills[skill_id( cur.get_string( 0 ) )] = cur.get_int( 1 );
         }
     }
@@ -339,9 +399,7 @@ void gun_actor::load_internal( JsonObject &obj, const std::string & )
     obj.read( "fake_int", fake_int );
     obj.read( "fake_per", fake_per );
 
-    auto arr = obj.get_array( "ranges" );
-    while( arr.has_more() ) {
-        auto mode = arr.next_array();
+    for( JsonArray mode : obj.get_array( "ranges" ) ) {
         if( mode.size() < 2 || mode.get_int( 0 ) > mode.get_int( 1 ) ) {
             obj.throw_error( "incomplete or invalid range specified", "ranges" );
         }
@@ -387,9 +445,9 @@ void gun_actor::load_internal( JsonObject &obj, const std::string & )
     obj.read( "require_sunlight", require_sunlight );
 }
 
-mattack_actor *gun_actor::clone() const
+std::unique_ptr<mattack_actor> gun_actor::clone() const
 {
-    return new gun_actor( *this );
+    return std::make_unique<gun_actor>( *this );
 }
 
 bool gun_actor::call( monster &z ) const
@@ -459,7 +517,7 @@ void gun_actor::shoot( monster &z, Creature &target, const gun_mode_id &mode ) c
             target.add_effect( effect_laserlocked, 5_turns );
             target.add_effect( effect_was_laserlocked, 5_turns );
             target.add_msg_if_player( m_warning,
-                                      _( "You're not sure why you've got a laser dot on you..." ) );
+                                      _( "You're not sure why you've got a laser dot on you…" ) );
         }
 
         z.moves -= targeting_cost;
@@ -483,9 +541,9 @@ void gun_actor::shoot( monster &z, Creature &target, const gun_mode_id &mode ) c
         return;
     }
 
-    standard_npc tmp( _( "The " ) + z.name(), {}, 8, fake_str, fake_dex, fake_int, fake_per );
+    standard_npc tmp( _( "The " ) + z.name(), z.pos(), {}, 8,
+                      fake_str, fake_dex, fake_int, fake_per );
     tmp.set_fake( true );
-    tmp.setpos( z.pos() );
     tmp.set_attitude( z.friendly ? NPCATT_FOLLOW : NPCATT_KILL );
     tmp.recoil = 0; // no need to aim
 

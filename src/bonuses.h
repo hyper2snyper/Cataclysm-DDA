@@ -1,6 +1,6 @@
 #pragma once
-#ifndef BONUSES_H
-#define BONUSES_H
+#ifndef CATA_SRC_BONUSES_H
+#define CATA_SRC_BONUSES_H
 
 #include <map>
 #include <vector>
@@ -52,7 +52,7 @@ struct affected_type {
         }
 
     private:
-        affected_stat stat;
+        affected_stat stat = affected_stat::AFFECTED_NULL;
         damage_type type;
 };
 
@@ -63,15 +63,14 @@ struct effect_scaling {
 
     float get( const Character &u ) const;
 
-    void load( JsonArray &jarr );
+    effect_scaling( const JsonObject &obj );
 };
 
 class bonus_container
 {
     public:
         bonus_container();
-        void load( JsonObject &jo );
-        void load( JsonArray &jarr, bool mult );
+        void load( const JsonObject &jo );
 
         float get_flat( const Character &u, affected_stat stat, damage_type dt ) const;
         float get_flat( const Character &u, affected_stat stat ) const;
@@ -82,10 +81,12 @@ class bonus_container
         std::string get_description() const;
 
     private:
+        void load( const JsonArray &jarr, bool mult );
+
         using bonus_map = std::map<affected_type, std::vector<effect_scaling>>;
         /** All kinds of bonuses by types to damage, hit etc. */
         bonus_map bonuses_flat;
         bonus_map bonuses_mult;
 };
 
-#endif
+#endif // CATA_SRC_BONUSES_H

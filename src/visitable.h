@@ -1,6 +1,6 @@
 #pragma once
-#ifndef VISITABLE_H
-#define VISITABLE_H
+#ifndef CATA_SRC_VISITABLE_H
+#define CATA_SRC_VISITABLE_H
 
 #include <climits>
 #include <functional>
@@ -74,9 +74,11 @@ class visitable
          * @param what ID of item to count charges of
          * @param limit stop searching after this many charges have been found
          * @param filter only count charges of items that match the filter
+         * @param visitor is called when UPS charge is used (parameter is the charge itself)
          */
         int charges_of( const std::string &what, int limit = INT_MAX,
-                        const std::function<bool( const item & )> &filter = return_true<item> ) const;
+                        const std::function<bool( const item & )> &filter = return_true<item>,
+                        std::function<void( int )> visitor = nullptr ) const;
 
         /**
          * Count items matching id including both this instance and any contained items
@@ -112,4 +114,4 @@ class visitable
         item remove_item( item &it );
 };
 
-#endif
+#endif // CATA_SRC_VISITABLE_H

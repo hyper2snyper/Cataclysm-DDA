@@ -4,14 +4,25 @@
     "id": "MANA_ADD"
   },
   {
+    "type": "mutation_type",
+    "id": "MANA_MULT"
+  },
+  {
+    "type": "mutation_type",
+    "id": "MANA_REGEN"
+  },
+  {
     "type": "mutation",
     "id": "MANA_ADD1",
     "name": "Lesser Mana Efficiency",
     "points": 1,
     "description": "You are able to store a little more mana in your body than usual.",
     "cancels": [ "MANA_SUB1", "MANA_SUB2", "MANA_SUB3" ],
+    "changes_to": [ "MANA_ADD2" ],
     "types": [ "MANA_ADD" ],
     "starting_trait": true,
+    "category": [ "MANATOUCHED" ],
+    "flags": [ "NON_THRESH" ],
     "mana_modifier": 500
   },
   {
@@ -21,9 +32,12 @@
     "points": 2,
     "description": "You are able to store more mana in your body than usual.",
     "cancels": [ "MANA_SUB1", "MANA_SUB2", "MANA_SUB3" ],
+    "changes_to": [ "MANA_ADD3" ],
     "types": [ "MANA_ADD" ],
     "starting_trait": true,
+    "category": [ "MANATOUCHED" ],
     "prereqs": [ "MANA_ADD1" ],
+    "flags": [ "NON_THRESH" ],
     "mana_modifier": 1000
   },
   {
@@ -35,7 +49,9 @@
     "cancels": [ "MANA_SUB1", "MANA_SUB2", "MANA_SUB3" ],
     "types": [ "MANA_ADD" ],
     "starting_trait": true,
+    "category": [ "MANATOUCHED" ],
     "prereqs": [ "MANA_ADD2" ],
+    "flags": [ "NON_THRESH" ],
     "mana_modifier": 2000
   },
   {
@@ -45,8 +61,10 @@
     "points": -1,
     "description": "You are able to store a little less mana in your body than usual.",
     "cancels": [ "MANA_ADD1", "MANA_ADD2", "MANA_ADD3" ],
+    "changes_to": [ "MANA_SUB2" ],
     "types": [ "MANA_ADD" ],
-    "mana_modifier": 500
+    "flags": [ "NON_THRESH" ],
+    "mana_modifier": -500
   },
   {
     "type": "mutation",
@@ -55,9 +73,11 @@
     "points": -2,
     "description": "You are able to store less mana in your body than usual.",
     "cancels": [ "MANA_ADD1", "MANA_ADD2", "MANA_ADD3" ],
+    "changes_to": [ "MANA_SUB3" ],
     "types": [ "MANA_ADD" ],
     "prereqs": [ "MANA_SUB1" ],
-    "mana_modifier": 1000
+    "flags": [ "NON_THRESH" ],
+    "mana_modifier": -1000
   },
   {
     "type": "mutation",
@@ -68,7 +88,8 @@
     "cancels": [ "MANA_ADD1", "MANA_ADD2", "MANA_ADD3" ],
     "types": [ "MANA_ADD" ],
     "prereqs": [ "MANA_SUB2" ],
-    "mana_modifier": 2000
+    "flags": [ "NON_THRESH" ],
+    "mana_modifier": -2000
   },
   {
     "type": "mutation",
@@ -77,8 +98,11 @@
     "points": 1,
     "description": "Your natural mana regeneration is slightly faster than normal.",
     "cancels": [ "BAD_MANA_REGEN1", "BAD_MANA_REGEN2", "BAD_MANA_REGEN3" ],
-    "category": [ "FISH", "ELFA", "ALPHA", "PLANT", "CEPHALOPOD" ],
+    "changes_to": [ "MANA_REGEN2" ],
+    "types": [ "MANA_REGEN" ],
+    "category": [ "FISH", "ELFA", "ALPHA", "PLANT", "CEPHALOPOD", "MANATOUCHED" ],
     "starting_trait": true,
+    "flags": [ "NON_THRESH" ],
     "mana_regen_multiplier": 1.1
   },
   {
@@ -89,7 +113,10 @@
     "description": "Your natural mana regeneration is faster than normal.",
     "prereqs": [ "MANA_REGEN1" ],
     "cancels": [ "BAD_MANA_REGEN1", "BAD_MANA_REGEN2", "BAD_MANA_REGEN3" ],
-    "category": [ "FISH", "ELFA", "PLANT" ],
+    "changes_to": [ "MANA_REGEN3" ],
+    "types": [ "MANA_REGEN" ],
+    "category": [ "FISH", "ELFA", "PLANT", "MANATOUCHED" ],
+    "flags": [ "NON_THRESH" ],
     "mana_regen_multiplier": 1.25
   },
   {
@@ -100,8 +127,10 @@
     "description": "Your natural mana regeneration is much faster than normal.",
     "prereqs": [ "MANA_REGEN2" ],
     "cancels": [ "BAD_MANA_REGEN1", "BAD_MANA_REGEN2", "BAD_MANA_REGEN3" ],
-    "threshreq": [ "THRESH_PLANT" ],
-    "category": [ "PLANT" ],
+    "types": [ "MANA_REGEN" ],
+    "threshreq": [ "THRESH_PLANT", "THRESH_MANA" ],
+    "category": [ "PLANT", "MANATOUCHED" ],
+    "flags": [ "NON_THRESH" ],
     "mana_regen_multiplier": 1.5
   },
   {
@@ -111,8 +140,11 @@
     "points": -1,
     "description": "Your natural mana regeneration is slightly slower than normal.",
     "cancels": [ "MANA_REGEN1", "MANA_REGEN2", "MANA_REGEN3" ],
+    "changes_to": [ "BAD_MANA_REGEN2" ],
+    "types": [ "MANA_REGEN" ],
     "category": [ "LIZARD", "BEAST", "LUPINE", "URSINE", "CATTLE", "SLIME", "MEDICAL", "CHIMERA" ],
     "starting_trait": true,
+    "flags": [ "NON_THRESH" ],
     "mana_regen_multiplier": 0.9
   },
   {
@@ -123,18 +155,23 @@
     "description": "Your natural mana regeneration is slower than normal.",
     "prereqs": [ "BAD_MANA_REGEN1" ],
     "cancels": [ "MANA_REGEN1", "MANA_REGEN2", "MANA_REGEN3" ],
+    "changes_to": [ "BAD_MANA_REGEN3" ],
+    "types": [ "MANA_REGEN" ],
     "category": [ "BEAST", "CATTLE", "SLIME", "MEDICAL", "CHIMERA" ],
+    "flags": [ "NON_THRESH" ],
     "mana_regen_multiplier": 0.75
   },
   {
     "type": "mutation",
     "id": "BAD_MANA_REGEN3",
-    "name": "Abysmal Mana Regeneration",
+    "name": { "str": "Abysmal Mana Regeneration" },
     "points": -6,
     "description": "Your natural mana regeneration is much slower than normal.",
     "prereqs": [ "BAD_MANA_REGEN2" ],
     "cancels": [ "MANA_REGEN1", "MANA_REGEN2", "MANA_REGEN3" ],
+    "types": [ "MANA_REGEN" ],
     "category": [ "BEAST", "MEDICAL" ],
+    "flags": [ "NON_THRESH" ],
     "mana_regen_multiplier": 0.5
   },
   {
@@ -144,8 +181,11 @@
     "points": 1,
     "description": "You can sense the mana in your body slightly better than normal, allowing you to tap into more of your reserves.",
     "cancels": [ "BAD_MANA_MULT1", "BAD_MANA_MULT2", "BAD_MANA_MULT3" ],
-    "category": [ "BIRD", "LIZARD", "SLIME", "FELINE", "CATTLE", "URSINE", "PLANT", "CEPHALOPOD", "ALPHA", "ELFA" ],
+    "changes_to": [ "MANA_MULT2" ],
+    "types": [ "MANA_MULT" ],
+    "category": [ "BIRD", "LIZARD", "SLIME", "FELINE", "CATTLE", "URSINE", "PLANT", "CEPHALOPOD", "ALPHA", "ELFA", "MANATOUCHED" ],
     "starting_trait": true,
+    "flags": [ "NON_THRESH" ],
     "mana_multiplier": 1.25
   },
   {
@@ -155,8 +195,11 @@
     "points": 3,
     "description": "You can sense the mana in your body better than normal, allowing you to tap into more of your reserves.",
     "cancels": [ "BAD_MANA_MULT1", "BAD_MANA_MULT2", "BAD_MANA_MULT3" ],
-    "category": [ "BIRD", "SLIME", "CATTLE", "PLANT", "CEPHALOPOD", "ELFA" ],
+    "changes_to": [ "MANA_MULT3" ],
+    "types": [ "MANA_MULT" ],
+    "category": [ "BIRD", "SLIME", "CATTLE", "PLANT", "CEPHALOPOD", "ELFA", "MANATOUCHED" ],
     "prereqs": [ "MANA_MULT1" ],
+    "flags": [ "NON_THRESH" ],
     "mana_multiplier": 1.9
   },
   {
@@ -166,8 +209,10 @@
     "points": 8,
     "description": "You can sense the mana in your body much better than normal, allowing you to tap into more of your reserves.",
     "cancels": [ "BAD_MANA_MULT1", "BAD_MANA_MULT2", "BAD_MANA_MULT3" ],
-    "category": [ "SLIME", "CATTLE", "CEPHALOPOD" ],
+    "types": [ "MANA_MULT" ],
+    "category": [ "SLIME", "CATTLE", "CEPHALOPOD", "MANATOUCHED" ],
     "prereqs": [ "MANA_MULT2" ],
+    "flags": [ "NON_THRESH" ],
     "mana_multiplier": 2.5
   },
   {
@@ -177,8 +222,11 @@
     "points": -1,
     "description": "You have a hard time sensing the mana in your body, making less of your reserves available for use.",
     "cancels": [ "MANA_MULT1", "MANA_MULT2", "MANA_MULT3" ],
+    "changes_to": [ "BAD_MANA_MULT2" ],
+    "types": [ "MANA_MULT" ],
     "category": [ "BEAST", "FISH", "LUPINE", "INSECT", "TROGLOBITE", "SPIDER", "RAT", "MOUSE", "MEDICAL", "CHIMERA", "RAPTOR" ],
     "starting_trait": true,
+    "flags": [ "NON_THRESH" ],
     "mana_multiplier": 0.85
   },
   {
@@ -188,19 +236,34 @@
     "points": -3,
     "description": "You have a hard time sensing the mana in your body, making less of your reserves available for use.",
     "cancels": [ "MANA_MULT1", "MANA_MULT2", "MANA_MULT3" ],
+    "changes_to": [ "BAD_MANA_MULT3" ],
+    "types": [ "MANA_MULT" ],
     "category": [ "BEAST", "INSECT", "TROGLOBITE", "MOUSE", "MEDICAL", "CHIMERA", "RAPTOR" ],
     "prereqs": [ "BAD_MANA_MULT1" ],
+    "flags": [ "NON_THRESH" ],
     "mana_multiplier": 0.65
   },
   {
     "type": "mutation",
     "id": "BAD_MANA_MULT3",
-    "name": "Abysmal Mana Sensitivity",
+    "name": { "str": "Abysmal Mana Sensitivity" },
     "points": -6,
     "description": "You have a hard time sensing the mana in your body, making less of your reserves available for use.",
     "cancels": [ "MANA_MULT1", "MANA_MULT2", "MANA_MULT3" ],
+    "types": [ "MANA_MULT" ],
     "category": [ "INSECT", "MEDICAL", "CHIMERA" ],
     "prereqs": [ "BAD_MANA_MULT2" ],
+    "flags": [ "NON_THRESH" ],
     "mana_multiplier": 0.35
+  },
+  {
+    "type": "mutation",
+    "id": "DEBUG_spell_mutation",
+    "name": "Debug Spell Mutation",
+    "points": 20,
+    "valid": false,
+    "description": "Gives all of the debug spells at max level.",
+    "debug": true,
+    "spells_learned": [ [ "example_template", 10 ], [ "debug_stamina", 0 ], [ "debug_hp", 0 ], [ "debug_bionic", 0 ], [ "debug_effect", 0 ] ]
   }
 ]

@@ -1,25 +1,23 @@
 #pragma once
-#ifndef MONGROUP_H
-#define MONGROUP_H
+#ifndef CATA_SRC_MONGROUP_H
+#define CATA_SRC_MONGROUP_H
 
 #include <map>
 #include <set>
-#include <vector>
 #include <string>
+#include <vector>
 
 #include "calendar.h"
-#include "enums.h"
 #include "io_tags.h"
 #include "monster.h"
-#include "string_id.h"
+#include "point.h"
 #include "type_id.h"
 
+class JsonIn;
+class JsonObject;
+class JsonOut;
 // from overmap.h
 class overmap;
-class JsonObject;
-class JsonIn;
-class JsonOut;
-
 struct MonsterGroupEntry;
 
 using FreqDef = std::vector<MonsterGroupEntry>;
@@ -67,14 +65,14 @@ struct MonsterGroup {
     mtype_id defaultMonster;
     FreqDef  monsters;
     bool IsMonsterInGroup( const mtype_id &id ) const;
-    bool is_animal;
+    bool is_animal = false;
     // replaces this group after a period of
     // time when exploring an unexplored portion of the map
-    bool replace_monster_group;
+    bool replace_monster_group = false;
     mongroup_id new_monster_group;
     time_duration monster_group_time = 0_turns;
-    bool is_safe; /// Used for @ref mongroup::is_safe()
-    int freq_total; // Default 1000 unless specified - max number to roll for spawns
+    bool is_safe = false; /// Used for @ref mongroup::is_safe()
+    int freq_total = 0; // Default 1000 unless specified - max number to roll for spawns
 };
 
 struct mongroup {
@@ -102,14 +100,17 @@ struct mongroup {
      */
     std::string horde_behaviour;
     bool diffuse = false;   // group size ind. of dist. from center and radius invariant
-    mongroup( const mongroup_id &ptype, int pposx, int pposy, int pposz,
+    mongroup( const mongroup_id &ptype, const tripoint &ppos,
               unsigned int prad, unsigned int ppop )
         : type( ptype )
-        , pos( pposx, pposy, pposz )
+        , pos( ppos )
         , radius( prad )
-        , population( ppop )
-        , target() {
+        , population( ppop ) {
     }
+    mongroup( const mongroup_id &ptype, int pposx, int pposy, int pposz,
+              unsigned int prad, unsigned int ppop )
+        : mongroup( ptype, tripoint( pposx, pposy, pposz ), prad, ppop )
+    {}
     mongroup( const std::string &ptype, tripoint ppos, unsigned int prad, unsigned int ppop,
               tripoint ptarget, int pint, bool pdie, bool phorde, bool pdiff ) :
         type( ptype ), pos( ppos ), radius( prad ), population( ppop ), target( ptarget ),
@@ -150,22 +151,22 @@ struct mongroup {
     void io( Archive & );
     using archive_type_tag = io::object_archive_tag;
 
-    void deserialize( JsonIn &jsin );
-    void deserialize_legacy( JsonIn &jsin );
-    void serialize( JsonOut &jsout ) const;
+    void deserialize( JsonIn &data );
+    void deserialize_legacy( JsonIn &json );
+    void serialize( JsonOut &json ) const;
 };
 
 class MonsterGroupManager
 {
     public:
-        static void LoadMonsterGroup( JsonObject &jo );
-        static void LoadMonsterBlacklist( JsonObject &jo );
-        static void LoadMonsterWhitelist( JsonObject &jo );
+        static void LoadMonsterGroup( const JsonObject &jo );
+        static void LoadMonsterBlacklist( const JsonObject &jo );
+        static void LoadMonsterWhitelist( const JsonObject &jo );
         static void FinalizeMonsterGroups();
-        static MonsterGroupResult GetResultFromGroup( const mongroup_id &group, int *quantity = 0 );
-        static bool IsMonsterInGroup( const mongroup_id &group, const mtype_id &id );
+        static MonsterGroupResult GetResultFromGroup( const mongroup_id &group, int *quantity = nullptr );
+        static bool IsMonsterInGroup( const mongroup_id &group, const mtype_id &monster );
         static bool isValidMonsterGroup( const mongroup_id &group );
-        static const mongroup_id &Monster2Group( const mtype_id &id );
+        static const mongroup_id &Monster2Group( const mtype_id &monster );
         static std::vector<mtype_id> GetMonstersFromGroup( const mongroup_id &group );
         static const MonsterGroup &GetMonsterGroup( const mongroup_id &group );
         static const MonsterGroup &GetUpgradedMonsterGroup( const mongroup_id &group );
@@ -192,4 +193,4 @@ class MonsterGroupManager
         static t_string_set monster_categories_whitelist;
 };
 
-#endif
+#endif // CATA_SRC_MONGROUP_H

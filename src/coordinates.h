@@ -1,11 +1,12 @@
 #pragma once
-#ifndef COORDINATES_H
-#define COORDINATES_H
+#ifndef CATA_SRC_COORDINATES_H
+#define CATA_SRC_COORDINATES_H
 
 #include <cstdlib>
 
 #include "enums.h"
 #include "game_constants.h"
+#include "point.h"
 
 /* find appropriate subdivided coordinates for absolute tile coordinate.
  * This is less obvious than one might think, for negative coordinates, so this
@@ -93,4 +94,4 @@ struct real_coords {
         return point( abs_om.x * subs_in_om * tiles_in_sub, abs_om.y * subs_in_om * tiles_in_sub );
     }
 };
-#endif
+#endif // CATA_SRC_COORDINATES_H

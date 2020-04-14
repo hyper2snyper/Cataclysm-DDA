@@ -1,6 +1,6 @@
 #pragma once
-#ifndef CATACURSE_H
-#define CATACURSE_H
+#ifndef CATA_SRC_CURSESPORT_H
+#define CATA_SRC_CURSESPORT_H
 
 #include <utility>
 #if defined(TILES) || defined(_WIN32)
@@ -8,6 +8,8 @@
 #include <array>
 #include <string>
 #include <vector>
+
+#include "point.h"
 
 namespace catacurses
 {
@@ -52,10 +54,8 @@ struct curseline {
 
 // The curses window struct
 struct WINDOW {
-    // Left side of window
-    int x;
-    // Top side of window
-    int y;
+    // Top-left corner of window
+    point pos;
     int width;
     int height;
     // Current foreground color from attron
@@ -66,8 +66,7 @@ struct WINDOW {
     bool inuse;
     // Tracks if the window text has been changed
     bool draw;
-    int cursorx;
-    int cursory;
+    point cursor;
     std::vector<curseline> line;
 };
 
@@ -88,5 +87,5 @@ bool handle_resize( int w, int h );
 int get_scaling_factor();
 
 #endif
-#endif
+#endif // CATA_SRC_CURSESPORT_H
 

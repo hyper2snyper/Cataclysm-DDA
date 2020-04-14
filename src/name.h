@@ -1,6 +1,6 @@
 #pragma once
-#ifndef NAME_H
-#define NAME_H
+#ifndef CATA_SRC_NAME_H
+#define CATA_SRC_NAME_H
 
 #include <string>
 
@@ -29,7 +29,7 @@ std::string generate( bool is_male );
 
 /// Clear names used for generation
 void clear();
-}
+} // namespace Name
 
 inline nameFlags operator|( nameFlags l, nameFlags r )
 {
@@ -41,4 +41,4 @@ inline nameFlags operator&( nameFlags l, nameFlags r )
     return static_cast<nameFlags>( static_cast<unsigned>( l ) & static_cast<unsigned>( r ) );
 }
 
-#endif
+#endif // CATA_SRC_NAME_H

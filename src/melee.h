@@ -1,12 +1,12 @@
 #pragma once
-#ifndef MELEE_H
-#define MELEE_H
+#ifndef CATA_SRC_MELEE_H
+#define CATA_SRC_MELEE_H
 
 namespace melee
 {
 
 float melee_hit_range( float accuracy );
 
-}
+} // namespace melee
 
-#endif
+#endif // CATA_SRC_MELEE_H

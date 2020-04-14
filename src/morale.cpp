@@ -1,33 +1,47 @@
 #include "morale.h"
 
-#include <cstdlib>
 #include <algorithm>
-#include <set>
+#include <array>
 #include <cmath>
+#include <cstdlib>
 #include <memory>
+#include <set>
 #include <utility>
 
 #include "bodypart.h"
 #include "cata_utility.h"
 #include "catacharset.h"
+#include "color.h"
 #include "cursesdef.h"
 #include "debug.h"
+#include "enums.h"
 #include "input.h"
+#include "int_id.h"
 #include "item.h"
-#include "itype.h"
-#include "iuse_actor.h"
 #include "morale_types.h"
 #include "options.h"
 #include "output.h"
+#include "point.h"
 #include "translations.h"
-#include "color.h"
-#include "enums.h"
-#include "iuse.h"
+#include "ui_manager.h"
 
 static const efftype_id effect_cold( "cold" );
 static const efftype_id effect_hot( "hot" );
 static const efftype_id effect_took_prozac( "took_prozac" );
 static const efftype_id effect_took_prozac_bad( "took_prozac_bad" );
+
+static const trait_id trait_BADTEMPER( "BADTEMPER" );
+static const trait_id trait_CENOBITE( "CENOBITE" );
+static const trait_id trait_FLOWERS( "FLOWERS" );
+static const trait_id trait_LEAVES2( "LEAVES2" );
+static const trait_id trait_LEAVES3( "LEAVES3" );
+static const trait_id trait_MASOCHIST( "MASOCHIST" );
+static const trait_id trait_MASOCHIST_MED( "MASOCHIST_MED" );
+static const trait_id trait_OPTIMISTIC( "OPTIMISTIC" );
+static const trait_id trait_ROOTS1( "ROOTS1" );
+static const trait_id trait_ROOTS2( "ROOTS2" );
+static const trait_id trait_ROOTS3( "ROOTS3" );
+static const trait_id trait_STYLISH( "STYLISH" );
 
 namespace
 {
@@ -105,7 +119,7 @@ static const morale_mult badtemper( 0.8, 1.2 );
 static const morale_mult prozac( 1.0, 0.25 );
 // The bad prozac effect reduces good morale by 75%.
 static const morale_mult prozac_bad( 0.25, 1.0 );
-}
+} // namespace morale_mults
 
 std::string player_morale::morale_point::get_name() const
 {
@@ -169,8 +183,8 @@ void player_morale::morale_point::add( const int new_bonus, const int new_max_bo
         sqrt_of_sum_of_squares = get_net_bonus() + new_bonus;
     } else {
         // Otherwise use the sqrt of sum of squares to nerf stacking
-        sqrt_of_sum_of_squares = pow( get_net_bonus(), 2 ) + pow( new_bonus, 2 );
-        sqrt_of_sum_of_squares = sqrt( sqrt_of_sum_of_squares );
+        sqrt_of_sum_of_squares = std::pow( get_net_bonus(), 2 ) + std::pow( new_bonus, 2 );
+        sqrt_of_sum_of_squares = std::sqrt( sqrt_of_sum_of_squares );
         sqrt_of_sum_of_squares *= sgn( bonus );
     }
 
@@ -178,14 +192,23 @@ void player_morale::morale_point::add( const int new_bonus, const int new_max_bo
     age = 0_turns; // Brand new. The assignment should stay below get_net_bonus() and pick_time().
 }
 
-time_duration player_morale::morale_point::pick_time( const time_duration current_time,
-        const time_duration new_time, bool same_sign ) const
+time_duration player_morale::morale_point::pick_time( const time_duration &current_time,
+        const time_duration &new_time, bool same_sign ) const
 {
     const time_duration remaining_time = current_time - age;
     return ( remaining_time <= new_time && same_sign ) ? new_time : remaining_time;
 }
 
-void player_morale::morale_point::decay( const time_duration ticks )
+void player_morale::morale_point::set_percent_contribution( double contribution )
+{
+    percent_contribution = contribution;
+}
+
+double player_morale::morale_point::get_percent_contribution()
+{
+    return percent_contribution;
+}
+void player_morale::morale_point::decay( const time_duration &ticks )
 {
     if( ticks < 0_turns ) {
         debugmsg( "The function called with negative ticks %d.", to_turns<int>( ticks ) );
@@ -197,7 +220,8 @@ void player_morale::morale_point::decay( const time_duration ticks )
 
 int player_morale::morale_point::normalize_bonus( int bonus, int max_bonus, bool capped ) const
 {
-    return ( ( abs( bonus ) > abs( max_bonus ) && ( max_bonus != 0 || capped ) ) ? max_bonus : bonus );
+    return ( ( std::abs( bonus ) > std::abs( max_bonus ) && ( max_bonus != 0 ||
+               capped ) ) ? max_bonus : bonus );
 }
 
 bool player_morale::mutation_data::get_active() const
@@ -240,28 +264,28 @@ player_morale::player_morale() :
     const auto update_constrained = std::bind( &player_morale::update_constrained_penalty, _1 );
     const auto update_masochist   = std::bind( &player_morale::update_masochist_bonus, _1 );
 
-    mutations[trait_id( "OPTIMISTIC" )]    = mutation_data(
-                std::bind( set_optimist, _1, 9 ),
-                std::bind( set_optimist, _1, 0 ) );
-    mutations[trait_id( "BADTEMPER" )]     = mutation_data(
-                std::bind( set_badtemper, _1, -9 ),
-                std::bind( set_badtemper, _1, 0 ) );
-    mutations[trait_id( "STYLISH" )]       = mutation_data(
-                std::bind( set_stylish, _1, true ),
-                std::bind( set_stylish, _1, false ) );
-    mutations[trait_id( "FLOWERS" )]       = mutation_data( update_constrained );
-    mutations[trait_id( "ROOTS1" )]         = mutation_data( update_constrained );
-    mutations[trait_id( "ROOTS2" )]        = mutation_data( update_constrained );
-    mutations[trait_id( "ROOTS3" )]        = mutation_data( update_constrained );
-    mutations[trait_id( "LEAVES2" )]       = mutation_data( update_constrained );
-    mutations[trait_id( "LEAVES3" )]       = mutation_data( update_constrained );
-    mutations[trait_id( "MASOCHIST" )]     = mutation_data( update_masochist );
-    mutations[trait_id( "MASOCHIST_MED" )] = mutation_data( update_masochist );
-    mutations[trait_id( "CENOBITE" )]      = mutation_data( update_masochist );
+    mutations[trait_OPTIMISTIC]    = mutation_data(
+                                         std::bind( set_optimist, _1, 9 ),
+                                         std::bind( set_optimist, _1, 0 ) );
+    mutations[trait_BADTEMPER]     = mutation_data(
+                                         std::bind( set_badtemper, _1, -9 ),
+                                         std::bind( set_badtemper, _1, 0 ) );
+    mutations[trait_STYLISH]       = mutation_data(
+                                         std::bind( set_stylish, _1, true ),
+                                         std::bind( set_stylish, _1, false ) );
+    mutations[trait_FLOWERS]       = mutation_data( update_constrained );
+    mutations[trait_ROOTS1]         = mutation_data( update_constrained );
+    mutations[trait_ROOTS2]        = mutation_data( update_constrained );
+    mutations[trait_ROOTS3]        = mutation_data( update_constrained );
+    mutations[trait_LEAVES2]       = mutation_data( update_constrained );
+    mutations[trait_LEAVES3]       = mutation_data( update_constrained );
+    mutations[trait_MASOCHIST]     = mutation_data( update_masochist );
+    mutations[trait_MASOCHIST_MED] = mutation_data( update_masochist );
+    mutations[trait_CENOBITE]      = mutation_data( update_masochist );
 }
 
 void player_morale::add( morale_type type, int bonus, int max_bonus,
-                         const time_duration duration, const time_duration decay_start,
+                         const time_duration &duration, const time_duration &decay_start,
                          bool capped, const itype *item_type )
 {
     if( ( duration == 0_turns ) & !is_permanent_morale( type ) ) {
@@ -348,6 +372,59 @@ morale_mult player_morale::get_temper_mult() const
     return mult;
 }
 
+void player_morale::calculate_percentage()
+{
+    const morale_mult mult = get_temper_mult();
+
+    int sum_of_positive_squares = 0;
+    int sum_of_negative_squares = 0;
+
+    for( auto &m : points ) {
+        const int bonus = m.get_net_bonus( mult );
+        if( bonus > 0 ) {
+            sum_of_positive_squares += std::pow( bonus, 2 );
+        } else {
+            sum_of_negative_squares += std::pow( bonus, 2 );
+        }
+    }
+
+    for( auto &m : points ) {
+        const int bonus = m.get_net_bonus( mult );
+        if( bonus > 0 ) {
+            m.set_percent_contribution( ( std::pow( bonus, 2 ) / sum_of_positive_squares ) * 100 );
+        } else {
+            m.set_percent_contribution( ( std::pow( bonus, 2 ) / sum_of_negative_squares ) * 100 );
+        }
+    }
+}
+
+int player_morale::get_total_negative_value() const
+{
+    const morale_mult mult = get_temper_mult();
+    int sum = 0;
+    for( auto &m : points ) {
+        const int bonus = m.get_net_bonus( mult );
+        if( bonus < 0 ) {
+            sum += std::pow( bonus, 2 );
+        }
+    }
+    return std::sqrt( sum );
+}
+
+int player_morale::get_total_positive_value() const
+{
+    const morale_mult mult = get_temper_mult();
+    int sum = 0;
+    for( auto &m : points ) {
+        const int bonus = m.get_net_bonus( mult );
+        if( bonus > 0 ) {
+            sum += std::pow( bonus, 2 );
+        }
+
+    }
+    return std::sqrt( sum );
+}
+
 int player_morale::get_level() const
 {
     if( !level_is_valid ) {
@@ -359,13 +436,13 @@ int player_morale::get_level() const
         for( auto &m : points ) {
             const int bonus = m.get_net_bonus( mult );
             if( bonus > 0 ) {
-                sum_of_positive_squares += pow( bonus, 2 );
+                sum_of_positive_squares += std::pow( bonus, 2 );
             } else {
-                sum_of_negative_squares += pow( bonus, 2 );
+                sum_of_negative_squares += std::pow( bonus, 2 );
             }
         }
 
-        level = sqrt( sum_of_positive_squares ) - sqrt( sum_of_negative_squares );
+        level = std::sqrt( sum_of_positive_squares ) - std::sqrt( sum_of_negative_squares );
 
         if( took_prozac ) {
             level *= morale_mults::prozac;
@@ -380,9 +457,9 @@ int player_morale::get_level() const
     return level;
 }
 
-void player_morale::decay( const time_duration ticks )
+void player_morale::decay( const time_duration &ticks )
 {
-    const auto do_decay = [ ticks ]( morale_point & m ) {
+    const auto do_decay = [ &ticks ]( morale_point & m ) {
         m.decay( ticks );
     };
 
@@ -392,17 +469,24 @@ void player_morale::decay( const time_duration ticks )
     invalidate();
 }
 
-void player_morale::display( double focus_gain )
+void player_morale::display( int focus_eq, int pain_penalty, int fatigue_penalty )
 {
-    const char *morale_gain_caption = _( "Total morale gain" );
-    const char *focus_gain_caption = _( "Focus gain per minute" );
+    /*calculates the percent contributions of the morale points,
+     * must be done before anything else in this method
+     */
+    calculate_percentage();
+
+    const char *morale_gain_caption = _( "Total morale:" );
+    const char *pain_caption = _( "Pain level:" );
+    const char *fatigue_caption = _( "Fatigue level:" );
+    const char *focus_equilibrium = _( "Focus trends towards:" );
     const char *points_is_empty = _( "Nothing affects your morale" );
 
-    int w_extra = 8;
+    int w_extra = 16;
 
     // Figure out how wide the source column needs to be.
     int source_column_width = std::max( utf8_width( morale_gain_caption ),
-                                        utf8_width( focus_gain_caption ) ) + w_extra;
+                                        utf8_width( focus_equilibrium ) ) + w_extra;
     if( points.empty() ) {
         source_column_width = std::max( utf8_width( points_is_empty ), source_column_width );
     } else {
@@ -416,70 +500,120 @@ void player_morale::display( double focus_gain )
     const int win_x = ( TERMX - win_w ) / 2;
     const int win_y = ( TERMY - win_h ) / 2;
 
-    catacurses::window w = catacurses::newwin( win_h, win_w, win_y, win_x );
-
-    const auto print_line = [ w ]( int y, const char *label, double value ) -> int {
+    catacurses::window w = catacurses::newwin( win_h, win_w, point( win_x, win_y ) );
+    //lambda function used to print almost everything to the window
+    const auto print_line = [ w ]( int y, const char *label, int value, bool isPercentage = false,
+    nc_color color_override = c_unset ) -> int {
         nc_color color;
-        if( value != 0.0 )
+        if( value != 0 )
         {
-            const int decimals = ( value - static_cast<int>( value ) != 0.0 ) ? 2 : 0;
-            color = ( value > 0.0 ) ? c_green : c_red;
-            mvwprintz( w, y, getmaxx( w ) - 8, color, "%+6.*f", decimals, value );
+            if( color_override == c_unset ) {
+                color = ( value > 0 ) ? c_green : c_light_red;
+            } else {
+                color = color_override;
+            }
+            if( isPercentage ) {
+                mvwprintz( w, point( getmaxx( w ) - 8, y ), color, "%d%%", value );
+            } else {
+                mvwprintz( w, point( getmaxx( w ) - 8, y ), color, "%+d", value );
+            }
+
         } else
         {
             color = c_dark_gray;
-            mvwprintz( w, y, getmaxx( w ) - 3, color, "-" );
+            mvwprintz( w, point( getmaxx( w ) - 3, y ), color, "-" );
         }
-        return fold_and_print_from( w, y, 2, getmaxx( w ) - 9, 0, color, label );
+        return fold_and_print_from( w, point( 2, y ), getmaxx( w ) - 9, 0, color, label );
     };
 
     int offset = 0;
     int rows_total = points.size();
-    int rows_visible = std::max( win_h - 8, 0 );
+    int penalty_rows = 0;
+    if( pain_penalty != 0 ) {
+        penalty_rows++;
+    }
+    if( fatigue_penalty != 0 ) {
+        penalty_rows++;
+    }
+    int rows_visible = std::max( win_h - 8 - penalty_rows, 0 );
+
+    // FIXME: temporarily disable redrawing of lower UIs before this UI is migrated to `ui_adaptor`
+    ui_adaptor ui( ui_adaptor::disable_uis_below {} );
 
     for( ;; ) {
 
+        //creates the window
         werase( w );
 
         draw_border( w );
 
-        mvwprintz( w, 1, 2, c_white, _( "Morale" ) );
+        mvwprintz( w, point( 2, 1 ), c_white, _( "Morale" ) );
 
-        mvwhline( w, 2, 0, LINE_XXXO, 1 );
-        mvwhline( w, 2, 1, 0, win_w - 2 );
-        mvwhline( w, 2, win_w - 1, LINE_XOXX, 1 );
+        mvwhline( w, point( 0, 2 ), LINE_XXXO, 1 );
+        mvwhline( w, point( 1, 2 ), 0, win_w - 2 );
+        mvwhline( w, point( win_w - 1, 2 ), LINE_XOXX, 1 );
 
-        mvwhline( w, win_h - 4, 0, LINE_XXXO, 1 );
-        mvwhline( w, win_h - 4, 1, 0, win_w - 2 );
-        mvwhline( w, win_h - 4, win_w - 1, LINE_XOXX, 1 );
+        mvwhline( w, point( 0, win_h - 4 - penalty_rows ), LINE_XXXO, 1 );
+        mvwhline( w, point( 1, win_h - 4 - penalty_rows ), 0, win_w - 2 );
+        mvwhline( w, point( win_w - 1, win_h - 4 - penalty_rows ), LINE_XOXX, 1 );
 
         if( !points.empty() ) {
             const char *source_column = _( "Source" );
             const char *value_column = _( "Value" );
+            const char *total_positve_label = _( "Total positive morale" );
+            const char *total_negitive_label = _( "Total negative morale" );
 
-            mvwprintz( w, 3, 2, c_light_gray, source_column );
-            mvwprintz( w, 3, win_w - utf8_width( value_column ) - 2, c_light_gray, value_column );
+            mvwprintz( w, point( 2, 3 ), c_light_gray, source_column );
+            mvwprintz( w, point( win_w - utf8_width( value_column ) - 2, 3 ), c_light_gray, value_column );
 
             const morale_mult mult = get_temper_mult();
 
             int line = 0;
+            line += print_line( 4 + line, total_positve_label, get_total_positive_value(), false,
+                                c_light_green );
+            //prints out all the positive morale effects
             for( size_t i = offset; i < static_cast<size_t>( rows_total ); ++i ) {
-                const std::string name = points[i].get_name();
                 const int bonus = points[i].get_net_bonus( mult );
+                if( bonus > 0 ) {
+                    const std::string name = points[i].get_name();
+                    line += print_line( 4 + line, name.c_str(), points[i].get_percent_contribution(), true );
+                }
 
-                line += print_line( 4 + line, name.c_str(), bonus );
+                if( line >= rows_visible ) {
+                    break;  // This prevents overflowing (unlikely, but just in case)
+                }
+            }
+            line++; //adds a space in the GUI
+            //prints out all the negitve morale effects
+            line += print_line( 4 + line, total_negitive_label, -1 * get_total_negative_value(), false, c_red );
+
+            for( size_t i = offset; i < static_cast<size_t>( rows_total ); ++i ) {
+                const int bonus = points[i].get_net_bonus( mult );
+                if( bonus < 0 ) {
+                    const std::string name = points[i].get_name();
+                    line += print_line( 4 + line, name.c_str(), points[i].get_percent_contribution(), true,
+                                        c_light_red );
+                }
                 if( line >= rows_visible ) {
                     break;  // This prevents overflowing (unlikely, but just in case)
                 }
             }
         } else {
-            fold_and_print_from( w, 3, 2, win_w - 4, 0, c_dark_gray, points_is_empty );
+            fold_and_print_from( w, point( 2, 3 ), win_w - 4, 0, c_dark_gray, points_is_empty );
         }
 
-        print_line( win_h - 3, morale_gain_caption, get_level() );
-        print_line( win_h - 2, focus_gain_caption, focus_gain );
+        print_line( win_h - 3 - penalty_rows, morale_gain_caption, get_level() );
+        if( pain_penalty != 0 ) {
+            print_line( win_h - 2 - penalty_rows, pain_caption, -pain_penalty, false, c_light_red );
+        }
+        if( fatigue_penalty != 0 ) {
+            print_line( win_h - 3, fatigue_caption, -fatigue_penalty, false, c_light_red );
+        }
+        //manual line as lambda will not do it properly here
+        mvwprintz( w, point( getmaxx( w ) - 8, win_h - 2 ), c_white, "%d", focus_eq );
+        fold_and_print_from( w, point( 2, win_h - 2 ), getmaxx( w ) - 9, 0, c_white, focus_equilibrium );
 
-        draw_scrollbar( w, offset, rows_visible, rows_total, 4, 0 );
+        draw_scrollbar( w, offset, rows_visible, rows_total, point( 0, 4 ) );
 
         wrefresh( w );
 
@@ -538,7 +672,7 @@ void player_morale::clear()
 {
     points.clear();
     no_body_part = body_part_data();
-    body_parts.fill( body_part_data() );
+    body_parts.clear();
     for( auto &m : mutations ) {
         m.second.clear();
     }
@@ -597,14 +731,10 @@ void player_morale::on_item_takeoff( const item &it )
     set_worn( it, false );
 }
 
-void player_morale::on_worn_item_transform( const item &it )
+void player_morale::on_worn_item_transform( const item &old_it, const item &new_it )
 {
-    item dummy = it;
-    dummy.convert( dynamic_cast<iuse_transform *>( item::find_type(
-                       it.typeId() )->get_use( "transform" )->get_actor_ptr() )->target );
-
-    set_worn( dummy, false );
-    set_worn( it, true );
+    set_worn( old_it, false );
+    set_worn( new_it, true );
 }
 
 void player_morale::on_worn_item_washed( const item &it )
@@ -613,12 +743,13 @@ void player_morale::on_worn_item_washed( const item &it )
         bp_data.filthy -= 1;
     };
 
-    const auto covered( it.get_covered_body_parts() );
+    const body_part_set covered( it.get_covered_body_parts() );
 
     if( covered.any() ) {
         for( const body_part bp : all_body_parts ) {
             if( covered.test( bp ) ) {
-                update_body_part( body_parts[bp] );
+                const bodypart_id bp_id = convert_bp( bp ).id();
+                update_body_part( body_parts[bp_id] );
             }
         }
     } else {
@@ -630,14 +761,15 @@ void player_morale::on_worn_item_washed( const item &it )
 
 void player_morale::on_effect_int_change( const efftype_id &eid, int intensity, body_part bp )
 {
+    const bodypart_id bo_id = convert_bp( bp ).id();
     if( eid == effect_took_prozac && bp == num_bp ) {
         set_prozac( intensity != 0 );
     } else if( eid == effect_took_prozac_bad && bp == num_bp ) {
         set_prozac_bad( intensity != 0 );
     } else if( eid == effect_cold && bp < num_bp ) {
-        body_parts[bp].cold = intensity;
+        body_parts[bo_id].cold = intensity;
     } else if( eid == effect_hot && bp < num_bp ) {
-        body_parts[bp].hot = intensity;
+        body_parts[bo_id].hot = intensity;
     }
 }
 
@@ -658,12 +790,13 @@ void player_morale::set_worn( const item &it, bool worn )
         bp_data.covered += sign;
     };
 
-    const auto covered( it.get_covered_body_parts() );
+    const body_part_set covered( it.get_covered_body_parts() );
 
     if( covered.any() ) {
         for( const body_part bp : all_body_parts ) {
             if( covered.test( bp ) ) {
-                update_body_part( body_parts[bp] );
+                const bodypart_id bp_id = convert_bp( bp ).id();
+                update_body_part( body_parts[bp_id] );
             }
         }
     } else {
@@ -724,29 +857,23 @@ void player_morale::update_stylish_bonus()
     int bonus = 0;
 
     if( stylish ) {
-        const auto bp_bonus = [ this ]( body_part bp, int bonus ) -> int {
-            return (
-                body_parts[bp].fancy > 0 ||
-                body_parts[opposite_body_part( bp )].fancy > 0 ) ? bonus : 0;
-        };
+        float tmp_bonus = 0;
+        for( const std::pair<bodypart_id, body_part_data> &bpt : body_parts ) {
+            if( bpt.second.fancy > 0 ) {
+                tmp_bonus += bpt.first->stylish_bonus;
+            }
+        }
         bonus = std::min( static_cast<int>( 2 * super_fancy_items.size() ) +
-                          2 * std::min( static_cast<int>( no_body_part.fancy ), 3 ) +
-                          bp_bonus( bp_torso,  6 ) +
-                          bp_bonus( bp_head,   3 ) +
-                          bp_bonus( bp_eyes,   2 ) +
-                          bp_bonus( bp_mouth,  2 ) +
-                          bp_bonus( bp_leg_l,  2 ) +
-                          bp_bonus( bp_foot_l, 1 ) +
-                          bp_bonus( bp_hand_l, 1 ), 20 );
+                          2 * std::min( static_cast<int>( no_body_part.fancy ), 3 ) + static_cast<int>( tmp_bonus ), 20 );
     }
     set_permanent( MORALE_PERM_FANCY, bonus );
 }
 
 void player_morale::update_masochist_bonus()
 {
-    const bool amateur_masochist = has_mutation( trait_id( "MASOCHIST" ) );
-    const bool advanced_masochist = has_mutation( trait_id( "MASOCHIST_MED" ) ) ||
-                                    has_mutation( trait_id( "CENOBITE" ) );
+    const bool amateur_masochist = has_mutation( trait_MASOCHIST );
+    const bool advanced_masochist = has_mutation( trait_MASOCHIST_MED ) ||
+                                    has_mutation( trait_CENOBITE );
     const bool any_masochist = amateur_masochist || advanced_masochist;
 
     int bonus = 0;
@@ -765,53 +892,41 @@ void player_morale::update_masochist_bonus()
 
 void player_morale::update_bodytemp_penalty( const time_duration &ticks )
 {
-    using bp_int_func = std::function<int( body_part )>;
-    const auto apply_pen = [ this, ticks ]( morale_type type, bp_int_func bp_int ) -> void {
-        const int max_pen =
-
-        2  * bp_int( bp_head ) +
-        2  * bp_int( bp_torso ) +
-        2  * bp_int( bp_mouth ) +
-        .5 * bp_int( bp_arm_l ) +
-        .5 * bp_int( bp_arm_r ) +
-        .5 * bp_int( bp_leg_l ) +
-        .5 * bp_int( bp_leg_r ) +
-        .5 * bp_int( bp_hand_l ) +
-        .5 * bp_int( bp_hand_r ) +
-        .5 * bp_int( bp_foot_l ) +
-        .5 * bp_int( bp_foot_r );
-
-        if( max_pen != 0 )
-        {
-            add( type, -2 * to_turns<int>( ticks ), -std::abs( max_pen ), 1_minutes, 30_seconds, true );
-        }
-    };
-    apply_pen( MORALE_COLD, [ this ]( body_part bp ) {
-        return body_parts[bp].cold;
-    } );
-    apply_pen( MORALE_HOT, [ this ]( body_part bp ) {
-        return body_parts[bp].hot;
-    } );
+    float max_cold_penalty = 0;
+    float max_hot_penalty = 0;
+    for( const std::pair<bodypart_id, body_part_data> &bpt : body_parts ) {
+        const bodypart_id bp = bpt.first;
+        max_cold_penalty += body_parts[bp].cold * bp->cold_morale_mod;
+        max_hot_penalty += body_parts[bp].hot * bp->hot_morale_mod;
+    }
+    if( max_cold_penalty != 0 ) {
+        add( MORALE_COLD, -2 * to_turns<int>( ticks ), -std::abs( max_cold_penalty ), 1_minutes, 30_seconds,
+             true );
+    }
+    if( max_hot_penalty != 0 ) {
+        add( MORALE_HOT, -2 * to_turns<int>( ticks ), -std::abs( max_hot_penalty ), 1_minutes, 30_seconds,
+             true );
+    }
 }
 
 void player_morale::update_constrained_penalty()
 {
-    const auto bp_pen = [ this ]( body_part bp, int pen ) -> int {
+    const auto bp_pen = [ this ]( bodypart_id bp, int pen ) -> int {
         return ( body_parts[bp].covered > 0 ) ? pen : 0;
     };
     int pen = 0;
 
-    if( has_mutation( trait_id( "FLOWERS" ) ) ) {
-        pen += bp_pen( bp_head, 10 );
+    if( has_mutation( trait_FLOWERS ) ) {
+        pen += bp_pen( bodypart_id( "head" ), 10 );
     }
-    if( has_mutation( trait_id( "ROOTS1" ) ) || has_mutation( trait_id( "ROOTS2" ) ) ||
-        has_mutation( trait_id( "ROOTS3" ) ) ) {
-        pen += bp_pen( bp_foot_l, 5 );
-        pen += bp_pen( bp_foot_r, 5 );
+    if( has_mutation( trait_ROOTS1 ) || has_mutation( trait_ROOTS2 ) ||
+        has_mutation( trait_ROOTS3 ) ) {
+        pen += bp_pen( bodypart_id( "foot_l" ), 5 );
+        pen += bp_pen( bodypart_id( "foot_r" ), 5 );
     }
-    if( has_mutation( trait_id( "LEAVES2" ) ) || has_mutation( trait_id( "LEAVES3" ) ) ) {
-        pen += bp_pen( bp_arm_l, 5 );
-        pen += bp_pen( bp_arm_r, 5 );
+    if( has_mutation( trait_LEAVES2 ) || has_mutation( trait_LEAVES3 ) ) {
+        pen += bp_pen( bodypart_id( "arm_l" ), 5 );
+        pen += bp_pen( bodypart_id( "arm_r" ), 5 );
     }
     set_permanent( MORALE_PERM_CONSTRAINED, -std::min( pen, 10 ) );
 }
@@ -822,25 +937,12 @@ void player_morale::update_squeamish_penalty()
         set_permanent( MORALE_PERM_FILTHY, 0 );
         return;
     }
-
     int penalty = 0;
-    const auto bp_pen = [ this ]( body_part bp, int penalty ) -> int {
-        return (
-            body_parts[bp].filthy > 0 ||
-            body_parts[opposite_body_part( bp )].filthy > 0 ) ? penalty : 0;
-    };
-    penalty = 2 * std::min( static_cast<int>( no_body_part.filthy ), 3 ) +
-              bp_pen( bp_torso,  6 ) +
-              bp_pen( bp_head,   7 ) +
-              bp_pen( bp_eyes,   8 ) +
-              bp_pen( bp_mouth,  9 ) +
-              bp_pen( bp_leg_l,  5 ) +
-              bp_pen( bp_leg_r,  5 ) +
-              bp_pen( bp_arm_l,  5 ) +
-              bp_pen( bp_arm_r,  5 ) +
-              bp_pen( bp_foot_l, 3 ) +
-              bp_pen( bp_foot_r, 3 ) +
-              bp_pen( bp_hand_l, 3 ) +
-              bp_pen( bp_hand_r, 3 );
+    for( const std::pair<bodypart_id, body_part_data> &bpt : body_parts ) {
+        if( bpt.second.filthy > 0 ) {
+            penalty += bpt.first->squeamish_penalty;
+        }
+    }
+    penalty += 2 * std::min( static_cast<int>( no_body_part.filthy ), 3 );
     set_permanent( MORALE_PERM_FILTHY, -penalty );
 }

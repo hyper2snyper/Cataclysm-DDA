@@ -1,6 +1,6 @@
 #pragma once
-#ifndef CELLULAR_AUTOMATA_H
-#define CELLULAR_AUTOMATA_H
+#ifndef CATA_SRC_CELLULAR_AUTOMATA_H
+#define CATA_SRC_CELLULAR_AUTOMATA_H
 
 #include <vector>
 
@@ -105,6 +105,6 @@ inline std::vector<std::vector<int>> generate_cellular_automaton( const int widt
 
     return current;
 }
-}
+} // namespace CellularAutomata
 
-#endif
+#endif // CATA_SRC_CELLULAR_AUTOMATA_H
